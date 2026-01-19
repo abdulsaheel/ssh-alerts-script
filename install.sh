@@ -2,7 +2,7 @@
 
 # ==============================
 # SSH LOGIN ALERT INSTALLER
-# (Discord Embed – FIXED)
+# (Discord Embed Version)
 # ==============================
 
 SCRIPT_PATH="/usr/local/bin/ssh-alert.sh"
@@ -11,7 +11,7 @@ ICON_URL="https://www-assets.kolide.com/assets/inventory/device_properties/icons
 
 # ---- Root check ----
 if [ "$EUID" -ne 0 ]; then
-  echo "[-] Run as root (sudo)."
+  echo "[-] Please run this installer as root (sudo)."
   exit 1
 fi
 
@@ -22,41 +22,47 @@ echo "==========================================="
 
 # ---- User input ----
 read -p "[?] Enter Discord Webhook URL: " WEBHOOK_URL
-[ -z "$WEBHOOK_URL" ] && { echo "[-] Webhook URL cannot be empty."; exit 1; }
+if [ -z "$WEBHOOK_URL" ]; then
+  echo "[-] Webhook URL cannot be empty."
+  exit 1
+fi
 
 read -p "[?] Enter Server Name: " SERVER_NAME
-[ -z "$SERVER_NAME" ] && { echo "[-] Server Name cannot be empty."; exit 1; }
+if [ -z "$SERVER_NAME" ]; then
+  echo "[-] Server Name cannot be empty."
+  exit 1
+fi
 
-echo "[*] Installing SSH alert script..."
+echo "[*] Creating SSH alert script..."
 
-# ---- Create trigger script (NO VARIABLE EXPANSION) ----
-cat <<'EOF' > "$SCRIPT_PATH"
+# ---- Create trigger script ----
+cat << EOF > "$SCRIPT_PATH"
 #!/bin/bash
 
-WEBHOOK_URL="__WEBHOOK_URL__"
-SERVER_NAME="__SERVER_NAME__"
-ICON_URL="__ICON_URL__"
+# === CONFIGURATION ===
+WEBHOOK_URL="$WEBHOOK_URL"
+SERVER_NAME="$SERVER_NAME"
+ICON_URL="$ICON_URL"
 
-USER="$(whoami)"
-HOST="$(hostname)"
-TIME="$(date '+%H:%M:%S %d/%m/%Y')"
+# === DATA COLLECTION ===
+USER="\$(whoami)"
+HOST="\$(hostname)"
+TIME="\$(date '+%H:%M:%S %d/%m/%Y')"
 
-JSON_PAYLOAD=$(cat <<JSON
+# === EMBED JSON (SAFE) ===
+JSON_PAYLOAD=\$(cat << JSON
 {
   "username": "SSH Monitor",
-  "avatar_url": "$ICON_URL",
+  "avatar_url": "\$ICON_URL",
   "embeds": [
     {
-      "author": {
-        "name": "SSH Login Detected",
-        "icon_url": "$ICON_URL"
-      },
+      "title": "SSH Login Detected",
       "color": 15158332,
       "fields": [
-        { "name": "Server", "value": "$SERVER_NAME", "inline": true },
-        { "name": "Host", "value": "$HOST", "inline": true },
-        { "name": "User", "value": "$USER", "inline": true },
-        { "name": "Time", "value": "$TIME", "inline": false }
+        { "name": "Server", "value": "\$SERVER_NAME", "inline": true },
+        { "name": "Host", "value": "\$HOST", "inline": true },
+        { "name": "User", "value": "\$USER", "inline": true },
+        { "name": "Time", "value": "\$TIME", "inline": false }
       ]
     }
   ]
@@ -64,34 +70,38 @@ JSON_PAYLOAD=$(cat <<JSON
 JSON
 )
 
+# === SEND WEBHOOK ===
 /usr/bin/curl -s \
   -H "Content-Type: application/json" \
-  -d "$JSON_PAYLOAD" \
-  "$WEBHOOK_URL" > /dev/null
+  -d "\$JSON_PAYLOAD" \
+  "\$WEBHOOK_URL" > /dev/null
 
 exit 0
 EOF
-
-# ---- Inject real values ----
-sed -i "s|__WEBHOOK_URL__|$WEBHOOK_URL|g" "$SCRIPT_PATH"
-sed -i "s|__SERVER_NAME__|$SERVER_NAME|g" "$SCRIPT_PATH"
-sed -i "s|__ICON_URL__|$ICON_URL|g" "$SCRIPT_PATH"
 
 # ---- Permissions ----
 chmod 755 "$SCRIPT_PATH"
 chown root:root "$SCRIPT_PATH"
 
-# ---- Update sshrc ----
-[ ! -f "$SSHRC_FILE" ] && touch "$SSHRC_FILE"
+# ---- Update sshrc safely ----
+if [ ! -f "$SSHRC_FILE" ]; then
+  touch "$SSHRC_FILE"
+fi
 
-grep -qx "$SCRIPT_PATH" "$SSHRC_FILE" || echo "$SCRIPT_PATH" >> "$SSHRC_FILE"
+if ! grep -q "$SCRIPT_PATH" "$SSHRC_FILE"; then
+  echo "$SCRIPT_PATH" >> "$SSHRC_FILE"
+  echo "[+] /etc/ssh/sshrc updated."
+else
+  echo "[!] sshrc already contains alert script. Skipping."
+fi
 
 echo "==========================================="
 echo "   INSTALLATION COMPLETE"
 echo "==========================================="
-echo "[✓] Script: $SCRIPT_PATH"
-echo "[✓] sshrc updated"
+echo "[✓] Script installed at: $SCRIPT_PATH"
+echo "[✓] Discord embed alerts enabled"
 echo
-echo "Test:"
-echo "  $SCRIPT_PATH"
-echo "Then SSH again."
+echo "➡️  Test manually:"
+echo "    $SCRIPT_PATH"
+echo
+echo "➡️  Then SSH again to verify alert."
