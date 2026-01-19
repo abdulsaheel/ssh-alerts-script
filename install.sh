@@ -2,7 +2,7 @@
 
 # ==============================
 # SSH LOGIN ALERT INSTALLER
-# Filter: Excludes ONLY 10.x.x.x
+# Logic: Exclude 10.x.x.x range
 # ==============================
 
 SCRIPT_PATH="/usr/local/bin/ssh-alert.sh"
@@ -32,10 +32,9 @@ if [ -z "$SERVER_NAME" ]; then
   SERVER_NAME=$(hostname)
 fi
 
-echo "[*] Creating SSH alert script (Excluding 10.x.x.x)..."
+echo "[*] Creating SSH alert script..."
 
 # ---- Create trigger script ----
-# We use 'EOF' in quotes to prevent the current shell from evaluating variables
 cat << 'EOF' > "$SCRIPT_PATH"
 #!/bin/bash
 
@@ -45,17 +44,19 @@ SERVER_NAME="REPLACE_SERVER"
 ICON_URL="REPLACE_ICON"
 
 # === IP DETECTION ===
-# SSH_CLIENT variable contains: "REMOTE_IP REMOTE_PORT LOCAL_PORT"
+# $SSH_CLIENT = "10.0.1.56 54321 22"
 REMOTE_IP=$(echo $SSH_CLIENT | awk '{print $1}')
 
-# === EXCLUSION LOGIC ===
-# Exit silently ONLY if the IP starts with 10.
+# === CRITICAL FILTER ===
+# If the IP starts with 10. we stop immediately.
 if [[ "$REMOTE_IP" =~ ^10\. ]]; then
     exit 0
 fi
 
-# If IP is empty (like a local sudo su), we can choose to exit or continue.
-# Currently set to continue so you see all non-10.x activity.
+# Also skip if it's a local loopback connection
+if [[ "$REMOTE_IP" == "127.0.0.1" ]] || [[ "$REMOTE_IP" == "::1" ]]; then
+    exit 0
+fi
 
 # === DATA COLLECTION ===
 USER=$(whoami)
@@ -91,7 +92,7 @@ JSON
 exit 0
 EOF
 
-# ---- Inject Variables into the created script ----
+# ---- Inject Variables ----
 sed -i "s|REPLACE_WEBHOOK|$WEBHOOK_URL|g" "$SCRIPT_PATH"
 sed -i "s|REPLACE_SERVER|$SERVER_NAME|g" "$SCRIPT_PATH"
 sed -i "s|REPLACE_ICON|$ICON_URL|g" "$SCRIPT_PATH"
@@ -100,7 +101,7 @@ sed -i "s|REPLACE_ICON|$ICON_URL|g" "$SCRIPT_PATH"
 chmod 755 "$SCRIPT_PATH"
 chown root:root "$SCRIPT_PATH"
 
-# ---- Update sshrc safely ----
+# ---- Update sshrc ----
 if [ ! -f "$SSHRC_FILE" ]; then
   touch "$SSHRC_FILE"
 fi
@@ -109,11 +110,9 @@ if ! grep -q "$SCRIPT_PATH" "$SSHRC_FILE"; then
   echo "$SCRIPT_PATH" >> "$SSHRC_FILE"
   echo "[+] /etc/ssh/sshrc updated."
 else
-  echo "[!] sshrc already linked. Updated script content."
+  echo "[!] Alert script already linked in sshrc."
 fi
 
 echo "==========================================="
 echo "    INSTALLATION COMPLETE"
 echo "==========================================="
-echo "[✓] Alerts for 10.x.x.x are SILENCED"
-echo "[✓] Alerts for 192.168.x.x and Public IPs are ENABLED"
