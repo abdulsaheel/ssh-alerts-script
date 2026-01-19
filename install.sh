@@ -7,7 +7,7 @@
 
 SCRIPT_PATH="/usr/local/bin/ssh-alert.sh"
 SSHRC_FILE="/etc/ssh/sshrc"
-ICON_URL="https://cdn.create.vista.com/api/media/small/725174800/stock-vector-ssh-code-icon-vector-illustration"
+ICON_URL="https://www-assets.kolide.com/assets/inventory/device_properties/icons/ssh-keys-399db5d7.png"
 
 # ---- Root check ----
 if [ "$EUID" -ne 0 ]; then
