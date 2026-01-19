@@ -22,21 +22,15 @@ echo "==========================================="
 
 # ---- User input ----
 read -p "[?] Enter Discord Webhook URL: " WEBHOOK_URL
-if [ -z "$WEBHOOK_URL" ]; then
-  echo "[-] Webhook URL cannot be empty."
-  exit 1
-fi
+[ -z "$WEBHOOK_URL" ] && { echo "[-] Webhook URL cannot be empty."; exit 1; }
 
 read -p "[?] Enter Server Name: " SERVER_NAME
-if [ -z "$SERVER_NAME" ]; then
-  echo "[-] Server Name cannot be empty."
-  exit 1
-fi
+[ -z "$SERVER_NAME" ] && { echo "[-] Server Name cannot be empty."; exit 1; }
 
 echo "[*] Creating SSH alert script..."
 
 # ---- Create trigger script ----
-cat << EOF > "$SCRIPT_PATH"
+cat <<EOF > "$SCRIPT_PATH"
 #!/bin/bash
 
 # === CONFIGURATION ===
@@ -50,22 +44,22 @@ HOST="\$(hostname)"
 TIME="\$(date '+%H:%M:%S %d/%m/%Y')"
 
 # === EMBED JSON (SAFE) ===
-JSON_PAYLOAD=$(cat << JSON
+JSON_PAYLOAD=\$(cat <<JSON
 {
   "username": "SSH Monitor",
-  "avatar_url": "$ICON_URL",
+  "avatar_url": "\$ICON_URL",
   "embeds": [
     {
       "author": {
         "name": "SSH Login Detected",
-        "icon_url": "$ICON_URL"
+        "icon_url": "\$ICON_URL"
       },
       "color": 15158332,
       "fields": [
-        { "name": "Server", "value": "$SERVER_NAME", "inline": true },
-        { "name": "Host", "value": "$HOST", "inline": true },
-        { "name": "User", "value": "$USER", "inline": true },
-        { "name": "Time", "value": "$TIME", "inline": false }
+        { "name": "Server", "value": "\$SERVER_NAME", "inline": true },
+        { "name": "Host", "value": "\$HOST", "inline": true },
+        { "name": "User", "value": "\$USER", "inline": true },
+        { "name": "Time", "value": "\$TIME", "inline": false }
       ]
     }
   ]
@@ -74,9 +68,9 @@ JSON
 )
 
 # === SEND WEBHOOK ===
-/usr/bin/curl -s \
-  -H "Content-Type: application/json" \
-  -d "\$JSON_PAYLOAD" \
+/usr/bin/curl -s \\
+  -H "Content-Type: application/json" \\
+  -d "\$JSON_PAYLOAD" \\
   "\$WEBHOOK_URL" > /dev/null
 
 exit 0
@@ -87,11 +81,9 @@ chmod 755 "$SCRIPT_PATH"
 chown root:root "$SCRIPT_PATH"
 
 # ---- Update sshrc safely ----
-if [ ! -f "$SSHRC_FILE" ]; then
-  touch "$SSHRC_FILE"
-fi
+[ ! -f "$SSHRC_FILE" ] && touch "$SSHRC_FILE"
 
-if ! grep -q "$SCRIPT_PATH" "$SSHRC_FILE"; then
+if ! grep -qx "$SCRIPT_PATH" "$SSHRC_FILE"; then
   echo "$SCRIPT_PATH" >> "$SSHRC_FILE"
   echo "[+] /etc/ssh/sshrc updated."
 else
