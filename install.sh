@@ -2,7 +2,7 @@
 
 # ==============================
 # SSH LOGIN ALERT INSTALLER
-# Logic: Exclude 10.x.x.x range
+# Logic: Exclude 10.x and 192.168.x
 # ==============================
 
 SCRIPT_PATH="/usr/local/bin/ssh-alert.sh"
@@ -17,7 +17,7 @@ fi
 
 clear
 echo "==========================================="
-echo "   SSH LOGIN ALERT INSTALLER"
+echo "   SSH LOGIN ALERT INSTALLER (INTERNAL IP BYPASS)"
 echo "==========================================="
 
 # ---- User input ----
@@ -32,7 +32,7 @@ if [ -z "$SERVER_NAME" ]; then
   SERVER_NAME=$(hostname)
 fi
 
-echo "[*] Creating SSH alert script..."
+echo "[*] Creating script with internal range exclusions..."
 
 # ---- Create trigger script ----
 cat << 'EOF' > "$SCRIPT_PATH"
@@ -44,17 +44,18 @@ SERVER_NAME="REPLACE_SERVER"
 ICON_URL="REPLACE_ICON"
 
 # === IP DETECTION ===
-# $SSH_CLIENT = "10.0.1.56 54321 22"
 REMOTE_IP=$(echo $SSH_CLIENT | awk '{print $1}')
 
-# === CRITICAL FILTER ===
-# If the IP starts with 10. we stop immediately.
-if [[ "$REMOTE_IP" =~ ^10\. ]]; then
+# === THE SILENCER FILTERS ===
+# 1. EXCLUDE 10.x.x.x
+# 2. EXCLUDE 192.168.x.x
+# 3. EXCLUDE localhost
+if [[ "$REMOTE_IP" =~ ^10\. ]] || [[ "$REMOTE_IP" =~ ^192\.168\. ]] || [[ "$REMOTE_IP" =~ ^127\.0\.0\.1 ]]; then
     exit 0
 fi
 
-# Also skip if it's a local loopback connection
-if [[ "$REMOTE_IP" == "127.0.0.1" ]] || [[ "$REMOTE_IP" == "::1" ]]; then
+# Skip if IP is empty (manual execution)
+if [ -z "$REMOTE_IP" ]; then
     exit 0
 fi
 
@@ -62,6 +63,8 @@ fi
 USER=$(whoami)
 HOST=$(hostname)
 TIME=$(date '+%H:%M:%S %d/%m/%Y')
+# Show if it's a shell or a specific command (like VS Code setup)
+PROC_INFO=$(ps -o comm= -p $PPID)
 
 # === SEND WEBHOOK ===
 JSON_PAYLOAD=$(cat << JSON
@@ -76,6 +79,7 @@ JSON_PAYLOAD=$(cat << JSON
         { "name": "Server", "value": "$SERVER_NAME", "inline": true },
         { "name": "User", "value": "$USER", "inline": true },
         { "name": "Remote IP", "value": "$REMOTE_IP", "inline": true },
+        { "name": "Source Process", "value": "$PROC_INFO", "inline": true },
         { "name": "Time", "value": "$TIME", "inline": false }
       ]
     }
@@ -101,18 +105,18 @@ sed -i "s|REPLACE_ICON|$ICON_URL|g" "$SCRIPT_PATH"
 chmod 755 "$SCRIPT_PATH"
 chown root:root "$SCRIPT_PATH"
 
-# ---- Update sshrc ----
+# ---- Ensure sshrc exists and is linked ----
 if [ ! -f "$SSHRC_FILE" ]; then
   touch "$SSHRC_FILE"
 fi
 
 if ! grep -q "$SCRIPT_PATH" "$SSHRC_FILE"; then
   echo "$SCRIPT_PATH" >> "$SSHRC_FILE"
-  echo "[+] /etc/ssh/sshrc updated."
-else
-  echo "[!] Alert script already linked in sshrc."
 fi
 
 echo "==========================================="
 echo "    INSTALLATION COMPLETE"
 echo "==========================================="
+echo "[✓] Ignored: 10.x.x.x"
+echo "[✓] Ignored: 192.168.x.x"
+echo "[✓] Active: All Public IPs"
