@@ -50,22 +50,22 @@ HOST="\$(hostname)"
 TIME="\$(date '+%H:%M:%S %d/%m/%Y')"
 
 # === EMBED JSON (SAFE) ===
-JSON_PAYLOAD=\$(cat << JSON
+JSON_PAYLOAD=$(cat << JSON
 {
   "username": "SSH Monitor",
-  "avatar_url": "\$ICON_URL",
+  "avatar_url": "$ICON_URL",
   "embeds": [
     {
-      "title": "🔐 SSH Login Detected",
-      "color": 15158332,
-      "thumbnail": {
-        "url": "\$ICON_URL"
+      "author": {
+        "name": "SSH Login Detected",
+        "icon_url": "$ICON_URL"
       },
+      "color": 15158332,
       "fields": [
-        { "name": "Server", "value": "\$SERVER_NAME", "inline": true },
-        { "name": "Host", "value": "\$HOST", "inline": true },
-        { "name": "User", "value": "\$USER", "inline": true },
-        { "name": "Time", "value": "\$TIME", "inline": false }
+        { "name": "Server", "value": "$SERVER_NAME", "inline": true },
+        { "name": "Host", "value": "$HOST", "inline": true },
+        { "name": "User", "value": "$USER", "inline": true },
+        { "name": "Time", "value": "$TIME", "inline": false }
       ]
     }
   ]
