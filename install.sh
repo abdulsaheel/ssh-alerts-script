@@ -7,7 +7,7 @@
 
 SCRIPT_PATH="/usr/local/bin/ssh-alert.sh"
 SSHRC_FILE="/etc/ssh/sshrc"
-ICON_URL="https://cdn-icons-png.flaticon.com/512/5261/5261867.png"
+ICON_URL="https://cdn.create.vista.com/api/media/small/725174800/stock-vector-ssh-code-icon-vector-illustration"
 
 # ---- Root check ----
 if [ "$EUID" -ne 0 ]; then
@@ -66,11 +66,7 @@ JSON_PAYLOAD=\$(cat << JSON
         { "name": "Host", "value": "\$HOST", "inline": true },
         { "name": "User", "value": "\$USER", "inline": true },
         { "name": "Time", "value": "\$TIME", "inline": false }
-      ],
-      "footer": {
-        "text": "SSH Security Alert",
-        "icon_url": "\$ICON_URL"
-      }
+      ]
     }
   ]
 }
