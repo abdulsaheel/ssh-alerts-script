@@ -2,10 +2,12 @@
 
 # ==============================
 # SSH LOGIN ALERT INSTALLER
+# (Discord Embed Version)
 # ==============================
 
 SCRIPT_PATH="/usr/local/bin/ssh-alert.sh"
 SSHRC_FILE="/etc/ssh/sshrc"
+ICON_URL="https://cdn-icons-png.flaticon.com/512/5261/5261867.png"
 
 # ---- Root check ----
 if [ "$EUID" -ne 0 ]; then
@@ -15,7 +17,7 @@ fi
 
 clear
 echo "==========================================="
-echo "      SSH LOGIN ALERT INSTALLER"
+echo "   SSH LOGIN ALERT INSTALLER (EMBED)"
 echo "==========================================="
 
 # ---- User input ----
@@ -31,7 +33,7 @@ if [ -z "$SERVER_NAME" ]; then
   exit 1
 fi
 
-echo "[*] Installing SSH alert script..."
+echo "[*] Creating SSH alert script..."
 
 # ---- Create trigger script ----
 cat << EOF > "$SCRIPT_PATH"
@@ -40,20 +42,45 @@ cat << EOF > "$SCRIPT_PATH"
 # === CONFIGURATION ===
 WEBHOOK_URL="$WEBHOOK_URL"
 SERVER_NAME="$SERVER_NAME"
+ICON_URL="$ICON_URL"
 
 # === DATA COLLECTION ===
 USER="\$(whoami)"
 HOST="\$(hostname)"
 TIME="\$(date '+%H:%M:%S %d/%m/%Y')"
 
-# === MESSAGE (JSON SAFE) ===
-CONTENT="### SSH LOGIN DETECTED\nServer: \${SERVER_NAME}\nHost: \${HOST}\nUser: \${USER}\nTime: \${TIME}"
+# === EMBED JSON (SAFE) ===
+JSON_PAYLOAD=\$(cat << JSON
+{
+  "username": "SSH Monitor",
+  "avatar_url": "\$ICON_URL",
+  "embeds": [
+    {
+      "title": "🔐 SSH Login Detected",
+      "color": 15158332,
+      "thumbnail": {
+        "url": "\$ICON_URL"
+      },
+      "fields": [
+        { "name": "Server", "value": "\$SERVER_NAME", "inline": true },
+        { "name": "Host", "value": "\$HOST", "inline": true },
+        { "name": "User", "value": "\$USER", "inline": true },
+        { "name": "Time", "value": "\$TIME", "inline": false }
+      ],
+      "footer": {
+        "text": "SSH Security Alert",
+        "icon_url": "\$ICON_URL"
+      }
+    }
+  ]
+}
+JSON
+)
 
-JSON_PAYLOAD=\$(printf '{"content":"%s"}' "\$(printf '%s' "\$CONTENT" | sed 's/"/\\\\\"/g')")
-
-/usr/bin/curl -s \\
-  -H "Content-Type: application/json" \\
-  -d "\$JSON_PAYLOAD" \\
+# === SEND WEBHOOK ===
+/usr/bin/curl -s \
+  -H "Content-Type: application/json" \
+  -d "\$JSON_PAYLOAD" \
   "\$WEBHOOK_URL" > /dev/null
 
 exit 0
@@ -79,7 +106,7 @@ echo "==========================================="
 echo "   INSTALLATION COMPLETE"
 echo "==========================================="
 echo "[✓] Script installed at: $SCRIPT_PATH"
-echo "[✓] SSH hook added via: $SSHRC_FILE"
+echo "[✓] Discord embed alerts enabled"
 echo
 echo "➡️  Test manually:"
 echo "    $SCRIPT_PATH"
