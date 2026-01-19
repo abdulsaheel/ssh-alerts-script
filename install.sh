@@ -1,103 +1,87 @@
 #!/bin/bash
 
-# --- 1. INITIALIZATION ---
-SCRIPT_PATH="/usr/local/sbin/sshd-login"
-PAM_FILE="/etc/pam.d/sshd"
+# ==============================
+# SSH LOGIN ALERT INSTALLER
+# ==============================
 
-# Check if running as root
-if [ "$EUID" -ne 0 ]; then 
-  echo "[-] Error: Please run as root (use sudo)."
+SCRIPT_PATH="/usr/local/bin/ssh-alert.sh"
+SSHRC_FILE="/etc/ssh/sshrc"
+
+# ---- Root check ----
+if [ "$EUID" -ne 0 ]; then
+  echo "[-] Please run this installer as root (sudo)."
   exit 1
 fi
 
 clear
 echo "==========================================="
-echo "   SSH NOTIFICATION SETUP (OTP VERIFY)    "
+echo "      SSH LOGIN ALERT INSTALLER"
 echo "==========================================="
 
-# --- 2. WEBHOOK INPUT & VALIDATION ---
-while true; do
-    read -p "[?] Enter Webhook URL: " WEBHOOK_URL
-    
-    if [[ -z "$WEBHOOK_URL" ]]; then
-        echo "[-] Error: URL cannot be empty."
-        continue
-    fi
+# ---- User input ----
+read -p "[?] Enter Discord Webhook URL: " WEBHOOK_URL
+if [ -z "$WEBHOOK_URL" ]; then
+  echo "[-] Webhook URL cannot be empty."
+  exit 1
+fi
 
-    OTP=$((100000 + RANDOM % 900000))
-    
-    echo "[*] Sending verification code to the provided URL..."
-    
-    HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
-        -H "Content-Type: application/json" \
-        -d "{\"content\": \"### [SECURE SETUP] Verification Code: \`$OTP\`\nPlease enter this code in your terminal to continue.\"}" \
-        "$WEBHOOK_URL")
+read -p "[?] Enter Server Name: " SERVER_NAME
+if [ -z "$SERVER_NAME" ]; then
+  echo "[-] Server Name cannot be empty."
+  exit 1
+fi
 
-    if [[ "$HTTP_STATUS" == "200" || "$HTTP_STATUS" == "204" ]]; then
-        echo "[+] Message sent successfully!"
-        break
-    else
-        echo "[-] Message sending failed (HTTP $HTTP_STATUS)."
-        read -p "[?] Press [R] to retry or [A] to abort: " CHOICE
-        [[ "$CHOICE" =~ ^[Aa]$ ]] && exit 1
-    fi
-done
+echo "[*] Installing SSH alert script..."
 
-# --- 3. OTP VERIFICATION ---
-while true; do
-    echo "-------------------------------------------"
-    read -p "[?] Enter the 6-digit OTP from Discord/Slack: " USER_OTP
-    
-    if [[ "$USER_OTP" == "$OTP" ]]; then
-        echo "[+] OTP Verified. Proceeding with installation..."
-        break
-    else
-        echo "[-] Wrong OTP."
-        read -p "[?] Press [R] to retry or [A] to abort: " CHOICE
-        [[ "$CHOICE" =~ ^[Aa]$ ]] && exit 1
-    fi
-done
-
-# --- 4. CREATE THE PAM NOTIFICATION SCRIPT ---
-echo "[*] Creating script at $SCRIPT_PATH..."
+# ---- Create trigger script ----
 cat << EOF > "$SCRIPT_PATH"
 #!/bin/bash
 
+# === CONFIGURATION ===
 WEBHOOK_URL="$WEBHOOK_URL"
+SERVER_NAME="$SERVER_NAME"
 
-# Only trigger on successful session open
-[ "\$PAM_TYPE" != "open_session" ] && exit 0
+# === DATA COLLECTION ===
+USER="\$(whoami)"
+HOST="\$(hostname)"
+TIME="\$(date '+%H:%M:%S %d/%m/%Y')"
 
-USER_NAME="\$PAM_USER"
-REMOTE_IP="\${PAM_RHOST:-UNKNOWN}"
-TTY_DEVICE="\$PAM_TTY"
-TARGET_HOST=\$(hostname)
-TIMESTAMP=\$(date "+%H:%M:%S %d/%m/%Y")
+# === MESSAGE (JSON SAFE) ===
+CONTENT="### SSH LOGIN DETECTED\nServer: \${SERVER_NAME}\nHost: \${HOST}\nUser: \${USER}\nTime: \${TIME}"
 
-MESSAGE="### 🔐 SSH LOGIN DETECTED
-* **Host:** \\\`\$TARGET_HOST\\\`
-* **User:** \\\`\$USER_NAME\\\`
-* **Source IP:** \\\`\$REMOTE_IP\\\`
-* **TTY:** \\\`\$TTY_DEVICE\\\`
-* **Time:** \\\`\$TIMESTAMP\\\`"
+JSON_PAYLOAD=\$(printf '{"content":"%s"}' "\$(printf '%s' "\$CONTENT" | sed 's/"/\\\\\"/g')")
 
-curl -s -X POST \
-  -H "Content-Type: application/json" \
-  -d "{\"content\": \"\$MESSAGE\"}" \
+/usr/bin/curl -s \\
+  -H "Content-Type: application/json" \\
+  -d "\$JSON_PAYLOAD" \\
   "\$WEBHOOK_URL" > /dev/null
+
+exit 0
 EOF
 
-# --- 5. PERMISSIONS & PAM ---
-chmod 700 "$SCRIPT_PATH"
+# ---- Permissions ----
+chmod 755 "$SCRIPT_PATH"
 chown root:root "$SCRIPT_PATH"
 
-if ! grep -q "$SCRIPT_PATH" "$PAM_FILE"; then
-    echo "session optional pam_exec.so $SCRIPT_PATH" >> "$PAM_FILE"
-    echo "[+] PAM configuration updated."
+# ---- Update sshrc safely ----
+if [ ! -f "$SSHRC_FILE" ]; then
+  touch "$SSHRC_FILE"
+fi
+
+if ! grep -q "$SCRIPT_PATH" "$SSHRC_FILE"; then
+  echo "$SCRIPT_PATH" >> "$SSHRC_FILE"
+  echo "[+] /etc/ssh/sshrc updated."
 else
-    echo "[!] PAM configuration already exists. Skipping."
+  echo "[!] sshrc already contains alert script. Skipping."
 fi
 
 echo "==========================================="
-echo "   INSTALLATION COMPLETE SUCCESSFUL      "
+echo "   INSTALLATION COMPLETE"
 echo "==========================================="
+echo "[✓] Script installed at: $SCRIPT_PATH"
+echo "[✓] SSH hook added via: $SSHRC_FILE"
+echo
+echo "➡️  Test manually:"
+echo "    $SCRIPT_PATH"
+echo
+echo "➡️  Then SSH again to verify alert."
