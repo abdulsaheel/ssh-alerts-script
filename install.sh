@@ -2,7 +2,8 @@
 
 # ==============================
 # SSH LOGIN ALERT INSTALLER
-# Logic: Exclude 10.x and 192.168.x
+# Logic: Ignore 10.x and 192.168.x
+# Alert: EVERYTHING ELSE (including 127.0.0.1)
 # ==============================
 
 SCRIPT_PATH="/usr/local/bin/ssh-alert.sh"
@@ -17,7 +18,7 @@ fi
 
 clear
 echo "==========================================="
-echo "   SSH LOGIN ALERT INSTALLER (INTERNAL IP BYPASS)"
+echo "   SSH LOGIN ALERT INSTALLER"
 echo "==========================================="
 
 # ---- User input ----
@@ -32,7 +33,7 @@ if [ -z "$SERVER_NAME" ]; then
   SERVER_NAME=$(hostname)
 fi
 
-echo "[*] Creating script with internal range exclusions..."
+echo "[*] Creating script (127.0.0.1 will now ALERT)..."
 
 # ---- Create trigger script ----
 cat << 'EOF' > "$SCRIPT_PATH"
@@ -44,18 +45,17 @@ SERVER_NAME="REPLACE_SERVER"
 ICON_URL="REPLACE_ICON"
 
 # === IP DETECTION ===
+# SSH_CLIENT: "IP PORT_REMOTE PORT_LOCAL"
 REMOTE_IP=$(echo $SSH_CLIENT | awk '{print $1}')
 
-# === THE SILENCER FILTERS ===
-# 1. EXCLUDE 10.x.x.x
-# 2. EXCLUDE 192.168.x.x
-# 3. EXCLUDE localhost
-if [[ "$REMOTE_IP" =~ ^10\. ]] || [[ "$REMOTE_IP" =~ ^192\.168\. ]] || [[ "$REMOTE_IP" =~ ^127\.0\.0\.1 ]]; then
-    exit 0
+# If REMOTE_IP is empty (happens on some local hops), set it to "Local/Unknown"
+if [ -z "$REMOTE_IP" ]; then
+    REMOTE_IP="Local-Terminal"
 fi
 
-# Skip if IP is empty (manual execution)
-if [ -z "$REMOTE_IP" ]; then
+# === THE SILENCER FILTERS ===
+# We ONLY ignore the specific internal ranges you requested.
+if [[ "$REMOTE_IP" =~ ^10\. ]] || [[ "$REMOTE_IP" =~ ^192\.168\. ]]; then
     exit 0
 fi
 
@@ -63,7 +63,6 @@ fi
 USER=$(whoami)
 HOST=$(hostname)
 TIME=$(date '+%H:%M:%S %d/%m/%Y')
-# Show if it's a shell or a specific command (like VS Code setup)
 PROC_INFO=$(ps -o comm= -p $PPID)
 
 # === SEND WEBHOOK ===
@@ -78,8 +77,8 @@ JSON_PAYLOAD=$(cat << JSON
       "fields": [
         { "name": "Server", "value": "$SERVER_NAME", "inline": true },
         { "name": "User", "value": "$USER", "inline": true },
-        { "name": "Remote IP", "value": "$REMOTE_IP", "inline": true },
-        { "name": "Source Process", "value": "$PROC_INFO", "inline": true },
+        { "name": "Source IP", "value": "$REMOTE_IP", "inline": true },
+        { "name": "Process", "value": "$PROC_INFO", "inline": true },
         { "name": "Time", "value": "$TIME", "inline": false }
       ]
     }
@@ -105,7 +104,7 @@ sed -i "s|REPLACE_ICON|$ICON_URL|g" "$SCRIPT_PATH"
 chmod 755 "$SCRIPT_PATH"
 chown root:root "$SCRIPT_PATH"
 
-# ---- Ensure sshrc exists and is linked ----
+# ---- Update sshrc ----
 if [ ! -f "$SSHRC_FILE" ]; then
   touch "$SSHRC_FILE"
 fi
@@ -117,6 +116,5 @@ fi
 echo "==========================================="
 echo "    INSTALLATION COMPLETE"
 echo "==========================================="
-echo "[✓] Ignored: 10.x.x.x"
-echo "[✓] Ignored: 192.168.x.x"
-echo "[✓] Active: All Public IPs"
+echo "[✓] Ignored: 10.x.x.x and 192.168.x.x"
+echo "[✓] ALERTING ON: 127.0.0.1 and all Public IPs"
