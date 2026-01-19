@@ -2,7 +2,7 @@
 
 # ==============================
 # SSH LOGIN ALERT INSTALLER
-# (Discord Embed Version)
+# (Discord Embed Version - 10.x.x.x Exclusion)
 # ==============================
 
 SCRIPT_PATH="/usr/local/bin/ssh-alert.sh"
@@ -44,6 +44,16 @@ WEBHOOK_URL="$WEBHOOK_URL"
 SERVER_NAME="$SERVER_NAME"
 ICON_URL="$ICON_URL"
 
+# === IP DETECTION & FILTERING ===
+# SSH_CLIENT contains: "IP PORT_REMOTE PORT_LOCAL"
+REMOTE_IP=\$(echo \$SSH_CLIENT | awk '{print \$1}')
+
+# Check if IP is in the 10.x.x.x range
+if [[ \$REMOTE_IP =~ ^10\. ]]; then
+    # Silent exit for internal IPs
+    exit 0
+fi
+
 # === DATA COLLECTION ===
 USER="\$(whoami)"
 HOST="\$(hostname)"
@@ -62,6 +72,7 @@ JSON_PAYLOAD=\$(cat << JSON
         { "name": "Server", "value": "\$SERVER_NAME", "inline": true },
         { "name": "Host", "value": "\$HOST", "inline": true },
         { "name": "User", "value": "\$USER", "inline": true },
+        { "name": "Remote IP", "value": "\$REMOTE_IP", "inline": true },
         { "name": "Time", "value": "\$TIME", "inline": false }
       ]
     }
@@ -71,9 +82,9 @@ JSON
 )
 
 # === SEND WEBHOOK ===
-/usr/bin/curl -s \
-  -H "Content-Type: application/json" \
-  -d "\$JSON_PAYLOAD" \
+/usr/bin/curl -s \\
+  -H "Content-Type: application/json" \\
+  -d "\$JSON_PAYLOAD" \\
   "\$WEBHOOK_URL" > /dev/null
 
 exit 0
@@ -96,12 +107,7 @@ else
 fi
 
 echo "==========================================="
-echo "   INSTALLATION COMPLETE"
+echo "    INSTALLATION COMPLETE"
 echo "==========================================="
 echo "[✓] Script installed at: $SCRIPT_PATH"
-echo "[✓] Discord embed alerts enabled"
-echo
-echo "➡️  Test manually:"
-echo "    $SCRIPT_PATH"
-echo
-echo "➡️  Then SSH again to verify alert."
+echo "[✓] Alerts for 10.x.x.x range are now DISABLED"
